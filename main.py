@@ -1,59 +1,34 @@
+from tkinter import filedialog, Tk, Label, Button, Listbox
+import face_recognition
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from tkinter import filedialog
-from tkinter import Tk
-from sendEmail import alert_popup
 
 
-# Function to select an image using file dialog
-def select_image():
+def select_images():
     root = Tk()
-    root.withdraw()  # Hide the main window
-    file_path = filedialog.askopenfilename()  # Open file dialog and get the file path
-    root.destroy()  # Close the root window
-    return file_path
+    root.withdraw()
+    file_paths = filedialog.askopenfilenames()
+    root.destroy()
+    return file_paths
 
 
-# Function to detect and display faces using DNN
-def detect_faces_dnn(filename):
-    # Load the model
-    net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'res10_300x300_ssd_iter_140000.caffemodel')
+def load_face_encodings(file_paths):
+    all_encodings = []
+    for file_path in file_paths:
+        image = face_recognition.load_image_file(file_path)
+        encodings = face_recognition.face_encodings(image)
+        all_encodings.extend(encodings)  # Add all encodings from each image
+    return all_encodings
 
-    # Read the image
-    image = cv2.imread(filename)
-    if image is None:
-        print("Could not read the image.")
-        return
 
-    (h, w) = image.shape[:2]
-    blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 1.0,
-                                 (300, 300), (104.0, 177.0, 123.0))
 
-    # Pass the blob through the network and obtain the detections and predictions
-    net.setInput(blob)
-    detections = net.forward()
+# Function to compare known face encodings with an unknown one
+def compare_faces(known_face_encodings, unknown_face_encoding):
+    results = face_recognition.compare_faces(known_face_encodings, unknown_face_encoding)
+    return any(results)
 
-    # Loop over the detections
-    for i in range(0, detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
-
-        # Filter out weak detections by ensuring the confidence is greater than a minimum threshold
-        if confidence > 0.5:
-            # Compute the (x, y)-coordinates of the bounding box for the face
-            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-            (startX, startY, endX, endY) = box.astype("int")
-
-            # Draw the bounding box of the face
-            cv2.rectangle(image, (startX, startY), (endX, endY),
-                          (0, 255, 0), 2)
-
-    # Display the result
-    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    plt.axis('off')
-    plt.show()
-
-def real_time_monitoring():
+# Function to detect and display faces using DNN and compare with selected images
+def real_time_monitoring(known_face_encodings):
     net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'res10_300x300_ssd_iter_140000.caffemodel')
     video_capture = cv2.VideoCapture(0)
 
@@ -72,6 +47,15 @@ def real_time_monitoring():
             if confidence > 0.5:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 (startX, startY, endX, endY) = box.astype("int")
+
+                face_encoding = face_recognition.face_encodings(frame, [(startY, endX, endY, startX)])
+                if face_encoding:
+                    match = compare_faces(known_face_encodings, face_encoding[0])
+                    if match:
+                        print("Registered face")
+                    if not match:
+                        print("Unknown Face Detected!")
+
                 cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
 
         cv2.imshow('Video', frame)
@@ -83,12 +67,20 @@ def real_time_monitoring():
     cv2.destroyAllWindows()
 
 
-# Select and process the image
+def start_gui():
+    def on_start_monitoring():
+        filenames = select_images()
+        if filenames:
+            known_encodings = load_face_encodings(filenames)
+            if known_encodings:
+                real_time_monitoring(known_encodings)
+
+    root = Tk()
+    root.title("Face Recognition System")
+    Label(root, text="Face Recognition System").pack()
+    Button(root, text="Select Images", command=on_start_monitoring).pack()
+    root.mainloop()
+
+# Main function
 if __name__ == "__main__":
-    filename = select_image()
-    if filename:
-        detect_faces_dnn(filename)
-
-    # 如果你想运行实时视频监控
-    real_time_monitoring()
-
+    start_gui()
