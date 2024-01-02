@@ -20,8 +20,6 @@ def load_face_encodings(file_paths):
         all_encodings.extend(encodings)  # Add all encodings from each image
     return all_encodings
 
-
-
 # Function to compare known face encodings with an unknown one
 def compare_faces(known_face_encodings, unknown_face_encoding):
     results = face_recognition.compare_faces(known_face_encodings, unknown_face_encoding)
@@ -42,6 +40,8 @@ def real_time_monitoring(known_face_encodings):
         net.setInput(blob)
         detections = net.forward()
 
+        face_statuses = []
+
         for i in range(0, detections.shape[2]):
             confidence = detections[0, 0, i, 2]
             if confidence > 0.5:
@@ -51,12 +51,19 @@ def real_time_monitoring(known_face_encodings):
                 face_encoding = face_recognition.face_encodings(frame, [(startY, endX, endY, startX)])
                 if face_encoding:
                     match = compare_faces(known_face_encodings, face_encoding[0])
-                    if match:
-                        print("Registered face")
-                    if not match:
-                        print("Unknown Face Detected!")
+                    face_status = "Registered" if match else "Unknown"
+                    face_statuses.append(face_status)
 
                 cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
+
+        # 处理识别到的每个人脸的状态
+        registered_faces = face_statuses.count("Registered")
+        unknown_faces = face_statuses.count("Unknown")
+
+        if unknown_faces > 2:
+            print("Alert: Unknown Faces Detected!")
+        elif registered_faces > 5:
+            print("Multiple Registered Faces Detected!")
 
         cv2.imshow('Video', frame)
 
@@ -66,7 +73,7 @@ def real_time_monitoring(known_face_encodings):
     video_capture.release()
     cv2.destroyAllWindows()
 
-
+# GUI for selecting images and starting the monitoring
 def start_gui():
     def on_start_monitoring():
         filenames = select_images()
